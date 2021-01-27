@@ -1,5 +1,7 @@
 # Hase, a nice RabbitMQ consumer
 
+![](hare.png)
+
 Hase (German for hare, bunny) is a nicer way to interact and consume [RabbitMQ](https://www.rabbitmq.com/) topics and queues. When dealing with topic consumers we end up repeating 80% of the code, so why not making something easy to reuse?
 
 Hase has been designed to look a lot like [FastAPI](https://fastapi.tiangolo.com/) and [Flask](https://flask.palletsprojects.com/en/1.1.x/) so it will be easy to move from one paradigm to another.
