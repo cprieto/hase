@@ -17,12 +17,12 @@ from hase import Hase
 app = Hase(host='amqp://localhost/', exchange='sample')
 
 @app.topic('ping')
-def handle_ping(_: Dict[str, Any]):
+async def handle_ping(_: Dict[str, Any]):
     print('ping!')
     app.publish({'pong': True}, 'pong')
 
 @app.topic('pong')
-def handle_pong(_: Dict[str, Any]):
+async def handle_pong(_: Dict[str, Any]):
     print('pong')
 
 app.run()
