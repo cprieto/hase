@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Callable, Dict, Any, Awaitable, Optional, NamedTuple, Union
 
 import orjson
-from aio_pika import IncomingMessage, connect_robust, ExchangeType
+from aio_pika import IncomingMessage, connect_robust, ExchangeType, Message
 
 
 class ValidationError(Exception):
@@ -70,7 +70,6 @@ class Hase:
 
         self._topics: Dict[str, TopicQueueOptions] = {}
         self._exchange = None
-        self._queues = []
 
     def register(self, topic: str, fn: Callable[[Any], Awaitable], *, name: Optional[str] = None,
                  exclusive: Optional[bool] = None, durable: Optional[bool] = None, auto_delete: Optional[bool] = None):
@@ -93,9 +92,10 @@ class Hase:
                 await self._topics[topic].fn(message)
 
     async def arun(self):
+        # TODO: This whole initialization could be moved to the __post_init__ method
         connection = await connect_robust(self.host)
         channel = await connection.channel()
-        exchange = await channel.declare_exchange(self.exchange, ExchangeType.TOPIC)
+        self._exchange = await channel.declare_exchange(self.exchange, ExchangeType.TOPIC)
 
         topic_queues = []
         for topic in self._topics.keys():
@@ -103,7 +103,7 @@ class Hase:
             queue = await (channel.declare_queue(**options) if options else channel.declare_queue())
             logging.debug(f'created queue {queue.name}')
 
-            await queue.bind(exchange, topic)
+            await queue.bind(self._exchange, topic)
             logging.debug(f"bound queue '{queue.name}' to topic '{topic}'")
 
             topic_queues.append(queue)
@@ -117,6 +117,13 @@ class Hase:
         def _(fn):
             self.register(topic, fn, name=name, exclusive=exclusive, durable=durable, auto_delete=auto_delete)
         return _
+
+    async def publish(self, what: Any, route: str, **kwargs):
+        if not self._exchange:
+            raise RuntimeError('you can only publish when the application is running')
+        message = Message(body=self.serde.serialize(what))
+        await self._exchange.publish(message, routing_key=route, **kwargs)
+        logging.debug(f'published message to route {route} in exchange {self._exchange}')
 
     def run(self):
         logging.debug(f'running consumers')
