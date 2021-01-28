@@ -1,9 +1,10 @@
 import asyncio
 import logging
+import inspect
 from dataclasses import dataclass
 from urllib.parse import urlparse
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, Any, Awaitable, Optional, NamedTuple, Union, List
+from typing import Callable, Dict, Any, Awaitable, Optional, NamedTuple, Union
 import orjson
 from aio_pika import IncomingMessage, connect_robust, ExchangeType
 
@@ -13,21 +14,25 @@ class ValidationError(Exception):
         super().__init__(message)
 
 
+class ArgumentError(Exception):
+    pass
+
+
 class SerDe(ABC):
     @abstractmethod
-    def serialize(self, data: Dict[str, Any]) -> bytes:
+    def serialize(self, data: Any) -> bytes:
         pass
 
     @abstractmethod
-    def deserialize(self, data: bytes) -> Dict[str, Any]:
+    def deserialize(self, data: bytes) -> Any:
         pass
 
 
 class JsonSerDe(SerDe):
-    def serialize(self, data: Dict[str, Any]) -> bytes:
+    def serialize(self, data: Any) -> bytes:
         return orjson.dumps(data)
 
-    def deserialize(self, data: bytes) -> Dict[str, Any]:
+    def deserialize(self, data: bytes) -> Any:
         return orjson.loads(data)
 
 
@@ -67,6 +72,9 @@ class Hase:
 
     def register(self, topic: str, fn: Callable[[Dict[str, Any]], Awaitable], *, name: Optional[str] = None,
                  exclusive: Optional[bool] = None, durable: Optional[bool] = None, auto_delete: Optional[bool] = None):
+        if not inspect.iscoroutinefunction(fn):
+            raise ArgumentError('Currently we only support handling coroutines (async functions)')
+
         options = {k: v for k, v in
                    {'name': name, 'exclusive': exclusive, 'durable': durable, 'auto_delete': auto_delete}.items()
                    if v is not None}
