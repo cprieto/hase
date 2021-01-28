@@ -7,7 +7,7 @@ authors = ["Cristian Prieto <me@cprieto.com>"]
 [tool.poetry.dependencies]
 python = "^3.9"
 aio-pika = "^6.7.1"
-rapidjson = "^1.0.0"
+orjson = "^3.4.7"
 
 [tool.poetry.dev-dependencies]
 
