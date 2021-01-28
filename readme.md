@@ -49,3 +49,9 @@ There is no official package for Hase yet, but you can use the master branch in 
 ```bash
 pip install https+git://github.com/cprieto/hase.git#egg=hase
 ```
+
+or using the fantastic Poetry:
+
+```bash
+poetry add https+git://github.com/cprieto/hase.git
+```
