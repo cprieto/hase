@@ -11,19 +11,19 @@ Hase has been designed to look a lot like [FastAPI](https://fastapi.tiangolo.com
 A simple consumer for the message `sample.ping`, emitting the message `sample.pong` and consuming it is very simple, we just define two handlers for it and that is all!
 
 ```python
-from typing import Any, Dict
+from typing import Any
 from hase import Hase
 
 app = Hase(host='amqp://localhost/', exchange='sample')
 
 @app.topic('ping')
-async def handle_ping(_: Dict[str, Any]):
+async def handle_ping(_: Any):
     print('ping!')
-    app.publish({'pong': True}, 'pong')
+    app.publish({'message': 'pong'}, 'pong')
 
 @app.topic('pong')
-async def handle_pong(_: Dict[str, Any]):
-    print('pong')
+async def handle_pong(data: Any):
+    print('pong', data['message'])
 
 app.run()
 ```

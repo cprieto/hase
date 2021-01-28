@@ -1,10 +1,12 @@
 import asyncio
 import logging
 import inspect
+from functools import wraps
 from dataclasses import dataclass
 from urllib.parse import urlparse
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, Any, Awaitable, Optional, NamedTuple, Union
+
 import orjson
 from aio_pika import IncomingMessage, connect_robust, ExchangeType
 
@@ -70,7 +72,7 @@ class Hase:
         self._exchange = None
         self._queues = []
 
-    def register(self, topic: str, fn: Callable[[Dict[str, Any]], Awaitable], *, name: Optional[str] = None,
+    def register(self, topic: str, fn: Callable[[Any], Awaitable], *, name: Optional[str] = None,
                  exclusive: Optional[bool] = None, durable: Optional[bool] = None, auto_delete: Optional[bool] = None):
         if not inspect.iscoroutinefunction(fn):
             raise ArgumentError('Currently we only support handling coroutines (async functions)')
@@ -109,6 +111,12 @@ class Hase:
         await asyncio.wait([
             asyncio.create_task(self.process_queue(queue)) for queue in topic_queues
         ])
+
+    def topic(self, topic: str, *, name: Optional[str] = None,
+              exclusive: Optional[bool] = None, durable: Optional[bool] = None, auto_delete: Optional[bool] = None):
+        def _(fn):
+            self.register(topic, fn, name=name, exclusive=exclusive, durable=durable, auto_delete=auto_delete)
+        return _
 
     def run(self):
         logging.debug(f'running consumers')
