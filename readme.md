@@ -25,6 +25,11 @@ async def handle_ping(_: Any):
 async def handle_pong(data: Any):
     print('pong', data['message'])
 
+# This will handle any ValueError thrown by a handler
+@app.handle_exception(ValueError)
+async def handler_error(message, exception):
+    print('I got some awful error!')
+    
 app.run()
 ```
 
@@ -32,10 +37,10 @@ If you create a message with the data `{"ping": True}` it will work as expected!
 
 ## Limitations
 
- - By default Hase expects your message to be a valid JSON message, it uses `rapidjson` for serialization/deserialization but you can change this simply creating your own `hase.SerDe` and passing it in the `Hase` constructor.
+ - By default, Hase expects your message to be a valid JSON message, it uses `orjson` for serialization/deserialization, but you can change this simply creating your own `hase.SerDe` and passing it in the `Hase` constructor.
  - We only support topics, maybe I will add more functionality if I needed
- - Async methods are the only supported methods right now, I think adding support for non-async methods won't be complex
- - We work so far with a single event loop, I am exploring cases to improve the performance and this is an important thing I am working on at this moment
+ - Async methods are the only supported methods for handlers
+ - We work so far with a single event loop
 
 ## Installation
 

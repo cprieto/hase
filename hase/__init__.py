@@ -1,11 +1,10 @@
 import asyncio
 import logging
 import inspect
-from functools import wraps
-from dataclasses import dataclass
 from urllib.parse import urlparse
+from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, Any, Awaitable, Optional, NamedTuple, Union
+from typing import Callable, Dict, Any, Awaitable, Optional, NamedTuple, Union, Type
 
 import orjson
 from aio_pika import IncomingMessage, connect_robust, ExchangeType, Message
@@ -61,6 +60,7 @@ class TopicQueueOptions(NamedTuple):
 class Hase:
     host: str
     exchange: str
+    exception_handlers: Dict[Type[Exception], Callable[[IncomingMessage, Exception], Awaitable]] = field(default={})
     serde: SerDe = JsonSerDe()
 
     def __post_init__(self):
@@ -71,10 +71,66 @@ class Hase:
         self._topics: Dict[str, TopicQueueOptions] = {}
         self._exchange = None
 
+    async def _handle_error(self, message: IncomingMessage, exception: Exception):
+        if (key := type(exception)) in self.exception_handlers.keys():
+            self.exception_handlers[key](message, exception)
+        else:
+            raise exception
+
+    async def _process_queue(self, queue):
+        async with queue.iterator() as queue_iter:
+            async for message in queue_iter:
+                topic = message.routing_key
+                logging.debug(f"got message for topic {topic}")
+                try:
+                    await self._topics[topic].fn(message)
+                except Exception as ex:
+                    await self._handle_error(message, ex)
+
+    def handle_exception(self, exception: Type[Exception]) -> Callable[..., None]:
+        """
+        Decorator to identify a handler to handle a given exception when processing a message
+        :param exception: Exception to handle
+        """
+
+        def _(fn):
+            self.exception_handlers[exception] = fn
+
+        return _
+
+    def topic(self, topic: str, *, name: Optional[str] = None,
+              exclusive: Optional[bool] = None, durable: Optional[bool] = None, auto_delete: Optional[bool] = None) -> \
+            Callable[..., None]:
+        """
+        Decorator to identify a given handler for a given topic
+
+        :param topic: what topic to consume
+        :param name: optional, name for the queue when consuming
+        :param exclusive: optional, is the queue exclusive?
+        :param durable: optional, is the queue durable?
+        :param auto_delete: optional, should the queue be deleted when the consumer disconnects?
+        """
+
+        def _(fn):
+            self.register(topic, fn, name=name, exclusive=exclusive, durable=durable, auto_delete=auto_delete)
+
+        return _
+
     def register(self, topic: str, fn: Callable[[Any], Awaitable], *, name: Optional[str] = None,
                  exclusive: Optional[bool] = None, durable: Optional[bool] = None, auto_delete: Optional[bool] = None):
+        """
+        Registers a handler with a given topic
+
+        :param topic: topic to consume
+        :param fn: async handler to consume the topic
+        :param name: optional, name for the given queue for the topic
+        :param exclusive: optional, should be the queue exclusive for this handler?
+        :param durable: optional, should be the queue durable?
+        :param auto_delete: optional, should be the queue deleted when the client disconects?
+        :return: None
+        """
         if not inspect.iscoroutinefunction(fn):
-            raise ArgumentError('Currently we only support handling coroutines (async functions)')
+            raise ArgumentError('currently we only support handling coroutines (async functions)')
 
         options = {k: v for k, v in
                    {'name': name, 'exclusive': exclusive, 'durable': durable, 'auto_delete': auto_delete}.items()
@@ -84,14 +140,11 @@ class Hase:
 
         self._topics[topic] = TopicQueueOptions(MessageProcessor(fn, self.serde), options)
 
-    async def process_queue(self, queue):
-        async with queue.iterator() as queue_iter:
-            async for message in queue_iter:
-                topic = message.routing_key
-                logging.debug(f"got message for topic {topic}")
-                await self._topics[topic].fn(message)
+    async def arun(self) -> None:
+        """
+        Asynchronous run, starts all the consumers
+        """
 
-    async def arun(self):
         # TODO: This whole initialization could be moved to the __post_init__ method
         connection = await connect_robust(self.host)
         channel = await connection.channel()
@@ -109,25 +162,29 @@ class Hase:
             topic_queues.append(queue)
 
         await asyncio.wait([
-            asyncio.create_task(self.process_queue(queue)) for queue in topic_queues
+            asyncio.create_task(self._process_queue(queue)) for queue in topic_queues
         ])
 
-    def topic(self, topic: str, *, name: Optional[str] = None,
-              exclusive: Optional[bool] = None, durable: Optional[bool] = None, auto_delete: Optional[bool] = None):
-        def _(fn):
-            self.register(topic, fn, name=name, exclusive=exclusive, durable=durable, auto_delete=auto_delete)
-        return _
+    def run(self) -> None:
+        """
+        Runs all the consumers, this is the sync method of arun
+        """
+        logging.debug(f'running consumers')
+        asyncio.run(self.arun())
 
     async def publish(self, what: Any, route: str, **kwargs):
+        """
+        Publishes a message to the exchange, this method uses the defined SerDe in the Hase constructor
+
+        :param what: message body to be published
+        :param route: route to publish the message (ie. topic)
+        :param kwargs: optional, parameters to pass to the exchange publishing
+        """
         if not self._exchange:
             raise RuntimeError('you can only publish when the application is running')
         message = Message(body=self.serde.serialize(what))
         await self._exchange.publish(message, routing_key=route, **kwargs)
         logging.debug(f'published message to route {route} in exchange {self._exchange}')
-
-    def run(self):
-        logging.debug(f'running consumers')
-        asyncio.run(self.arun())
 
 
 __all__ = ['Hase']
