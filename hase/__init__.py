@@ -9,6 +9,8 @@ from typing import Callable, Dict, Any, Awaitable, Optional, NamedTuple, Union, 
 import orjson
 from aio_pika import IncomingMessage, connect_robust, ExchangeType, Message
 
+logger = logging.getLogger('hase')
+
 
 class ValidationError(Exception):
     def __init__(self, message: str):
@@ -82,7 +84,7 @@ class Hase:
         async with queue.iterator() as queue_iter:
             async for message in queue_iter:
                 topic = message.routing_key
-                logging.debug(f"got message for topic {topic}")
+                logger.debug(f"got message for topic {topic}")
                 try:
                     await self._topics[topic].fn(message)
                 except Exception as ex:
@@ -138,7 +140,7 @@ class Hase:
                    {'name': name, 'exclusive': exclusive, 'durable': durable, 'auto_delete': auto_delete}.items()
                    if v is not None}
 
-        logging.debug(f'registered handler for topic {topic}')
+        logger.debug(f'registered handler for topic {topic}')
 
         self._topics[topic] = TopicQueueOptions(MessageProcessor(fn, self.serde), options)
 
@@ -156,10 +158,10 @@ class Hase:
         for topic in self._topics.keys():
             options = self._topics[topic].options
             queue = await (channel.declare_queue(**options) if options else channel.declare_queue())
-            logging.debug(f'created queue {queue.name}')
+            logger.debug(f'created queue {queue.name}')
 
             await queue.bind(self._exchange, topic)
-            logging.debug(f"bound queue '{queue.name}' to topic '{topic}'")
+            logger.debug(f"bound queue '{queue.name}' to topic '{topic}'")
 
             topic_queues.append(queue)
 
@@ -179,7 +181,7 @@ class Hase:
             raise RuntimeError('you can only publish when the application is running')
         message = Message(body=self.serde.serialize(what))
         await self._exchange.publish(message, routing_key=route, **kwargs)
-        logging.debug(f'published message to route {route} in exchange {self._exchange}')
+        logger.debug(f'published message to route {route} in exchange {self._exchange}')
 
 
 __all__ = ['Hase']
