@@ -130,7 +130,8 @@ class Hase:
         :param auto_delete: optional, should be the queue deleted when the client disconects?
         :return: None
         """
-        if not inspect.iscoroutinefunction(fn):
+        valid = inspect.iscoroutinefunction(fn) or (hasattr(fn, '__call__') and inspect.iscoroutinefunction(fn.__call__))
+        if not valid:
             raise ArgumentError('currently we only support handling coroutines (async functions)')
 
         options = {k: v for k, v in
