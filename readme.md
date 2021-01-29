@@ -11,6 +11,7 @@ Hase has been designed to look a lot like [FastAPI](https://fastapi.tiangolo.com
 A simple consumer for the message `sample.ping`, emitting the message `sample.pong` and consuming it is very simple, we just define two handlers for it and that is all!
 
 ```python
+import asyncio
 from typing import Any
 from hase import Hase
 
@@ -30,7 +31,7 @@ async def handle_pong(data: Any):
 async def handler_error(message, exception):
     print('I got some awful error!')
     
-app.run()
+asyncio.run(app.run())
 ```
 
 If you create a message with the data `{"ping": True}` it will work as expected!

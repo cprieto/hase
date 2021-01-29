@@ -142,7 +142,7 @@ class Hase:
 
         self._topics[topic] = TopicQueueOptions(MessageProcessor(fn, self.serde), options)
 
-    async def arun(self) -> None:
+    async def run(self) -> None:
         """
         Asynchronous run, starts all the consumers
         """
@@ -166,13 +166,6 @@ class Hase:
         await asyncio.wait([
             asyncio.create_task(self._process_queue(queue)) for queue in topic_queues
         ])
-
-    def run(self) -> None:
-        """
-        Runs all the consumers, this is the sync method of arun
-        """
-        logging.debug(f'running consumers')
-        asyncio.run(self.arun())
 
     async def publish(self, what: Any, route: str, **kwargs):
         """
