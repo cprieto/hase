@@ -60,7 +60,8 @@ class TopicQueueOptions(NamedTuple):
 class Hase:
     host: str
     exchange: str
-    exception_handlers: Dict[Type[Exception], Callable[[IncomingMessage, Exception], Awaitable]] = field(default={})
+    exception_handlers: Dict[Type[Exception], Callable[[IncomingMessage, Exception], Awaitable]] = field(
+        default_factory=dict)
     serde: SerDe = JsonSerDe()
 
     def __post_init__(self):
