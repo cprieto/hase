@@ -73,6 +73,7 @@ class Hase:
 
         self._topics: Dict[str, TopicQueueOptions] = {}
         self._exchange = None
+        self._handlers: Dict[str, str] = {}
 
     async def _handle_error(self, message: IncomingMessage, exception: Exception):
         if (key := type(exception)) in self.exception_handlers.keys():
@@ -84,10 +85,15 @@ class Hase:
         async with queue.iterator() as queue_iter:
             async for message in queue_iter:
                 topic = message.routing_key
-                logger.debug(f"got message for topic {topic}")
+                logger.debug(f"got message for topic {topic} in queue {queue.name}")
                 try:
-                    await self._topics[topic].fn(message)
+                    queue_topic = self._handlers[queue.name]
+                    fn = self._topics[queue_topic].fn
+
+                    logger.debug(f'Processing with handler {fn} registered for topic {queue_topic}')
+                    await fn(message)
                 except Exception as ex:
+                    logger.exception(f'handler raised exception when processing topic {topic}')
                     await self._handle_error(message, ex)
 
     def handle_exception(self, exception: Type[Exception]) -> Callable[..., None]:
@@ -164,6 +170,7 @@ class Hase:
             logger.debug(f"bound queue '{queue.name}' to topic '{topic}'")
 
             topic_queues.append(queue)
+            self._handlers[queue.name] = topic
 
         await asyncio.wait([
             asyncio.create_task(self._process_queue(queue)) for queue in topic_queues
