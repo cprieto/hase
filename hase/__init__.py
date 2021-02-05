@@ -30,8 +30,8 @@ class SerDe(ABC):
     def deserialize(self, data: bytes) -> Any:
         pass
 
-    @abstractmethod
     @property
+    @abstractmethod
     def content_type(self) -> str:
         pass
 
