@@ -3,7 +3,7 @@ import logging
 import inspect
 from urllib.parse import urlparse
 from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 from typing import Callable, Dict, Any, Awaitable, Optional, NamedTuple, Union, Type
 
 import orjson
@@ -30,6 +30,11 @@ class SerDe(ABC):
     def deserialize(self, data: bytes) -> Any:
         pass
 
+    @abstractmethod
+    @property
+    def content_type(self) -> str:
+        pass
+
 
 class JsonSerDe(SerDe):
     def serialize(self, data: Any) -> bytes:
@@ -37,6 +42,9 @@ class JsonSerDe(SerDe):
 
     def deserialize(self, data: bytes) -> Any:
         return orjson.loads(data)
+
+    def content_type(self) -> str:
+        return 'application/json'
 
 
 @dataclass
@@ -58,11 +66,14 @@ class TopicQueueOptions(NamedTuple):
     options: Dict[str, Union[str, bool]]
 
 
+ExceptionHandler = Callable[[IncomingMessage, Exception], Awaitable]
+
+
 @dataclass
 class Hase:
     host: str
     exchange: str
-    exception_handlers: Dict[Type[Exception], Callable[[IncomingMessage, Exception], Awaitable]] = field(
+    exception_handlers: Dict[Type[Exception], ExceptionHandler] = field(
         default_factory=dict)
     serde: SerDe = JsonSerDe()
 
@@ -186,9 +197,22 @@ class Hase:
         """
         if not self._exchange:
             raise RuntimeError('you can only publish when the application is running')
-        message = Message(body=self.serde.serialize(what))
+
+        message = Message(body=self.serde.serialize(what), headers={
+            'content_type': self.serde.content_type
+        })
         await self._exchange.publish(message, routing_key=route, **kwargs)
         logger.debug(f'published message to route {route} in exchange {self._exchange}')
+
+    def add_exception_handler(self, exception: Type[Exception], handler: ExceptionHandler) -> None:
+        """
+        Adds an existing exception handler to manage a thrown exception
+
+        :param exception: Type of exception to catch
+        :param handler: Handler to manage that exception
+        :return: Nothing
+        """
+        self.exception_handlers[exception] = handler
 
 
 __all__ = ['Hase']
