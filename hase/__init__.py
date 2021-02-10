@@ -53,9 +53,9 @@ class MessageProcessor:
     serde: SerDe
 
     async def process(self, message: IncomingMessage):
-        async with message.process():
-            data = self.serde.deserialize(message.body)
-            await self.fn(data)
+        data = self.serde.deserialize(message.body)
+        await self.fn(data)
+        await message.ack()
 
     async def __call__(self, message: IncomingMessage):
         await self.process(message)
@@ -88,7 +88,7 @@ class Hase:
 
     async def _handle_error(self, message: IncomingMessage, exception: Exception):
         if (key := type(exception)) in self.exception_handlers.keys():
-            self.exception_handlers[key](message, exception)
+            await self.exception_handlers[key](message, exception)
         else:
             raise exception
 
