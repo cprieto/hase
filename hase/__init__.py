@@ -79,8 +79,8 @@ class Hase:
 
     def __post_init__(self):
         url = urlparse(self.host)
-        if url.scheme != 'amqp':
-            raise ValidationError('Hase only supports amqp protocol')
+        if url.scheme not in ['amqp', 'amqps']:
+            raise ValidationError('Hase only supports amqp or amqps protocols')
 
         self._topics: Dict[str, TopicQueueOptions] = {}
         self._exchange = None
